@@ -53,3 +53,54 @@ body {
     color: #888;
     font-size: 14px;
 }
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.project-path {
+    color: #555;
+    font-size: 13px;
+    margin-bottom: 4px;
+    font-family: 'Courier New', monospace;
+}
+
+.project-command {
+    color: #666;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.status {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.status.stopped {
+    background: #2a1a1a;
+    color: #ff6b6b;
+}
+
+.status.running {
+    background: #1a2a1a;
+    color: #a8ff78;
+}
+
+.btn-run {
+    background: #048A81;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-run:hover {
+    background: #036b63;
+}

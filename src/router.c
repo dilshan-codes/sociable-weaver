@@ -4,21 +4,30 @@
 #include <string.h>
 // Needed for strlen() and memset().
 // strlen() counts how many characters are in a string. memset() fills memory with a specific value — we use it to zero buffers.
+#include <stdlib.h>
+// Needed for malloc() and free() — allocate and release heap memory for file contents.
 #include "router.h"
+
+// ── forward declarations ───────────────────────────────────────────────────
+// These tell the compiler these functions exist later in this same file.
+// Without them, router_handle() cannot call send_file() or send_404()
+// because they are defined below router_handle().
+void send_file(int client_fd, const char *filepath, const char *content_type);
+void send_404(int client_fd);
 
 void router_handle(int client_fd) {
 // Called by server.c every time a browser sends a request.
 // Parameter: client_fd = the integer ID of this browser connection. We use client_fd to receive data from the browser and send data back.
 
-    char buffer[4096];
+    char buffer[8192];
+    // Increased from 4096 to 8192 — Day 2 requests include more headers.
     // When a browser visits localhost:8080 it sends a block of text through the socket. That text is the HTTP request. We need a place to store those incoming bytes — that is the buffer.
-    // char buffer[4096] declares an array of 4096 characters on the stack. this array is created when the function starts and destroyed when it ends. 4096 bytes = 4KB which is enough for any typical HTTP request header.
 
     memset(buffer, 0, sizeof(buffer));
     // memset() fills every byte of buffer with the value 0. Arguments:
     // &buffer = address of the buffer (where to start filling)
     // 0 = the value to fill with
-    // sizeof(buffer) = how many bytes to fill (4096 in this case)
+    // sizeof(buffer) = how many bytes to fill
 
     int bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
     // recv() reads incoming data from the browser connection into buffer. recv() returns how many bytes were actually received.
@@ -54,46 +63,78 @@ void router_handle(int client_fd) {
     printf("Request: %s %s\n", method, path);
     // Log the request to the terminal so we can see what is happening, %s in printf is replaced with the string value of method and path
 
-    
-    // An HTTP response has a specific structure:
-    // Line 1: Status line — HTTP version, status code, reason phrase
-    // Line 2+: Headers — key: value pairs giving info about the response
-    // Blank line: Required separator between headers and body
-    // Body: The actual content the browser displays
-    //
-    // \r\n = carriage return + newline.
-    // HTTP requires \r\n at the end of each header line, not just \n.
-    // Using only \n would violate the HTTP specification and some
-    // browsers would reject or misinterpret the response.
+    // ── route each path to the correct file ───────────────────────────────
+    // strcmp() compares two strings — returns 0 if they are equal.
+    // We check the path the browser asked for and call send_file() with
+    // the matching file on disk and the correct Content-Type for that file.
+    if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
+        send_file(client_fd, "web/index.html", "text/html"); // serve the dashboard page
 
-    char *response =
+    } else if (strcmp(path, "/style.css") == 0) {
+        send_file(client_fd, "web/style.css", "text/css"); // serve the stylesheet
+
+    } else if (strcmp(path, "/app.js") == 0) {
+        send_file(client_fd, "web/app.js", "application/javascript"); // serve the JS
+
+    } else {
+        send_404(client_fd); // path not recognised — send a 404 response
+    }
+}
+
+// ── send_file ──────────────────────────────────────────────────────────────
+// reads a file from disk and sends it to the browser with correct HTTP headers.
+// Parameters:
+// client_fd = the browser connection to send to
+// filepath = path to the file on disk e.g. "web/index.html"
+// content_type = the MIME type to tell the browser e.g. "text/html"
+void send_file(int client_fd, const char *filepath, const char *content_type) {
+    FILE *f = fopen(filepath, "rb"); // fopen opens the file. "rb" = read binary mode
+    if (!f) {
+        send_404(client_fd); // file not found on disk — send 404
+        return;
+    }
+
+    fseek(f, 0, SEEK_END);  // move file cursor to the end
+    long size = ftell(f);   // ftell returns current position = file size in bytes
+    fseek(f, 0, SEEK_SET);  // move cursor back to the start before reading
+
+    char *content = (char*)malloc(size + 1);
+    // malloc() allocates 'size' bytes on the heap at runtime.
+    // We use heap here because file size is unknown at compile time —
+    // stack arrays need a fixed size known before the program runs.
+    // +1 = extra byte for the null terminator at the end of the string.
+    if (!content) { fclose(f); send_404(client_fd); return; }
+    // if malloc failed (out of memory) — clean up and send 404
+
+    fread(content, 1, size, f); // read entire file into content buffer
+    // Arguments: content = destination, 1 = read 1 byte at a time, size = how many, f = source file
+    content[size] = '\0'; // null terminate so string functions work correctly
+    fclose(f); // always close the file when done reading
+
+    // build HTTP response headers
+    char headers[512];
+    sprintf(headers,
         "HTTP/1.1 200 OK\r\n"
-        // HTTP/1.1 = the HTTP version we are speaking
-        // 200 = status code meaning success
-        // OK = human readable reason for the status code
-
-        "Content-Type: text/plain\r\n"
-        // Content-Type tells the browser what kind of data is coming.
-        // text/plain = plain text, display it as-is.
-        // On Day 2 this becomes text/html for HTML files, text/css for CSS etc.
-
+        "Content-Type: %s\r\n"       // tells browser what kind of file this is
+        "Content-Length: %ld\r\n"    // tells browser exactly how many bytes are coming
         "Connection: close\r\n"
-        // Connection: close tells the browser we will close the connection
-        // after sending this response. This keeps our server simple for now.
+        "\r\n",                       // blank line required — separates headers from body
+        content_type, size);
 
+    send(client_fd, headers, strlen(headers), 0); // send headers first
+    send(client_fd, content, size, 0);             // then send the file content as the body
+
+    free(content); // always free malloc'd memory when done — forgetting causes memory leaks
+}
+
+// ── send_404 ───────────────────────────────────────────────────────────────
+// sends a 404 Not Found response when the browser asks for a path we do not have
+void send_404(int client_fd) {
+    char *response =
+        "HTTP/1.1 404 Not Found\r\n"
+        "Content-Type: text/plain\r\n"
+        "Connection: close\r\n"
         "\r\n"
-        // This blank line is REQUIRED by the HTTP specification.
-        // It separates the headers above from the body below.
-        // Without it the browser treats everything as headers and displays nothing.
-
-        "Sociable Weaver is alive.";
-        // This is the body — what the browser actually displays.
-
+        "404 — Page not found";
     send(client_fd, response, strlen(response), 0);
-    // send() pushes bytes from our response string through the socket to the browser. Arguments:
-    // client_fd = which connection to send to
-    // response = the data to send
-    // strlen(response) = how many bytes to send
-    //   strlen() counts characters until it hits the null terminator \0
-    // 0 = no special flags
 }

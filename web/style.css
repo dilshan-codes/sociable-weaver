@@ -1,0 +1,55 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0f0f13;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+.header {
+    background: #1a1a2e;
+    padding: 24px 32px;
+    border-bottom: 2px solid #048A81;
+}
+
+.header h1 {
+    font-size: 28px;
+    color: #048A81;
+    letter-spacing: 2px;
+}
+
+.header p {
+    color: #888;
+    margin-top: 4px;
+    font-size: 14px;
+}
+
+.container {
+    padding: 32px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.project-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a3e;
+    border-left: 4px solid #048A81;
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+}
+
+.project-card h3 {
+    color: #a8ff78;
+    margin-bottom: 8px;
+}
+
+.project-card p {
+    color: #888;
+    font-size: 14px;
+}

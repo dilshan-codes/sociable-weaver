@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "name": "Retro Museum",
+    "path": "C:/Users/dsaje/Projects/retro-museum",
+    "command": "python main.py",
+    "db_port": 0
+  }
+]

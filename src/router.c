@@ -7,6 +7,7 @@
 #include <stdlib.h>
 // Needed for malloc() and free() — allocate and release heap memory for file contents.
 #include "router.h"
+#include "projects.h"
 
 // ── forward declarations ───────────────────────────────────────────────────
 // These tell the compiler these functions exist later in this same file.
@@ -75,6 +76,23 @@ void router_handle(int client_fd) {
 
     } else if (strcmp(path, "/app.js") == 0) {
         send_file(client_fd, "web/app.js", "application/javascript"); // serve the JS
+    
+    } else if (strcmp(path, "/api/projects") == 0) {
+    // browser is asking for the project list as JSON
+    char json[8192];
+    projects_list_json(json, sizeof(json)); // fills json with the array string
+
+    char headers[256];
+    sprintf(headers,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n" // tells browser this is JSON not HTML
+        "Content-Length: %zu\r\n"
+        "Connection: close\r\n"
+        "\r\n",
+        strlen(json));
+
+    send(client_fd, headers, strlen(headers), 0);
+    send(client_fd, json, strlen(json), 0);
 
     } else {
         send_404(client_fd); // path not recognised — send a 404 response

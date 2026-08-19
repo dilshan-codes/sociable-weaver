@@ -1,158 +1,233 @@
 #include <winsock2.h>
-// Needed for send() and recv() — the functions that read and write data through a socket connection.
 #include <stdio.h>
 #include <string.h>
-// Needed for strlen() and memset().
-// strlen() counts how many characters are in a string. memset() fills memory with a specific value — we use it to zero buffers.
 #include <stdlib.h>
-// Needed for malloc() and free() — allocate and release heap memory for file contents.
 #include "router.h"
 #include "projects.h"
+#include "runner.h"
 
-// ── forward declarations ───────────────────────────────────────────────────
-// These tell the compiler these functions exist later in this same file.
-// Without them, router_handle() cannot call send_file() or send_404()
-// because they are defined below router_handle().
 void send_file(int client_fd, const char *filepath, const char *content_type);
+void send_json(int client_fd, const char *json);
 void send_404(int client_fd);
 
+// ── parse_body ─────────────────────────────────────────────────────────────
+// finds the body of a POST request — the part after the blank line \r\n\r\n
+// returns pointer into buffer where body starts, or NULL if not found
+static const char *parse_body(const char *buffer) {
+    const char *body = strstr(buffer, "\r\n\r\n");
+    if (body) return body + 4; // skip past the \r\n\r\n separator
+    return NULL;
+}
+
+// ── parse_json_string ──────────────────────────────────────────────────────
+// extracts a string value from JSON body for a given key
+// e.g. parse_json_string(body, "name", out, 256) finds "name":"VALUE" and copies VALUE
+static void parse_json_string(const char *body, const char *key, char *out, int out_size) {
+    out[0] = '\0';
+    char search[64];
+    snprintf(search, sizeof(search), "\"%s\":", key); // build "key": pattern
+    const char *found = strstr(body, search);
+    if (!found) return;
+    found += strlen(search);
+    while (*found == ' ') found++;   // skip whitespace after colon
+    if (*found != '"') return;       // value must start with quote
+    found++;                          // skip opening quote
+    int i = 0;
+    while (*found && *found != '"' && i < out_size - 1) {
+        out[i++] = *found++;
+    }
+    out[i] = '\0';
+}
+
+// ── parse_json_int ─────────────────────────────────────────────────────────
+// extracts an integer value from JSON body for a given key
+static int parse_json_int(const char *body, const char *key) {
+    char search[64];
+    snprintf(search, sizeof(search), "\"%s\":", key);
+    const char *found = strstr(body, search);
+    if (!found) return 0;
+    found += strlen(search);
+    while (*found == ' ') found++;
+    return atoi(found); // atoi converts string to integer
+}
+
+// ── router_handle ──────────────────────────────────────────────────────────
 void router_handle(int client_fd) {
-// Called by server.c every time a browser sends a request.
-// Parameter: client_fd = the integer ID of this browser connection. We use client_fd to receive data from the browser and send data back.
-
     char buffer[8192];
-    // Increased from 4096 to 8192 — Day 2 requests include more headers.
-    // When a browser visits localhost:8080 it sends a block of text through the socket. That text is the HTTP request. We need a place to store those incoming bytes — that is the buffer.
-
     memset(buffer, 0, sizeof(buffer));
-    // memset() fills every byte of buffer with the value 0. Arguments:
-    // &buffer = address of the buffer (where to start filling)
-    // 0 = the value to fill with
-    // sizeof(buffer) = how many bytes to fill
-
     int bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-    // recv() reads incoming data from the browser connection into buffer. recv() returns how many bytes were actually received.
-    // Arguments:
-    // client_fd = which connection to read from
-    // buffer = where to store the received bytes
-    // sizeof(buffer) - 1 = maximum bytes to read
-    // 0 = no special flags
-
     if (bytes_received <= 0) return;
-    // If recv() returns 0 or negative, the browser disconnected — nothing to do
 
-    char method[8];
-    char path[512];
-    // The first line of an HTTP request always looks like this: GET /index.html HTTP/1.1
-    // We need to extract two pieces: the method and the path.
-    // char method[8] = array to hold the method (GET, POST, etc.)
-    // 8 characters is enough for any HTTP method.
-    // char path[512] = array to hold the path (/index.html, /api/projects, etc.)
-
+    char method[8], raw_path[512];
     memset(method, 0, sizeof(method));
-    memset(path, 0, sizeof(path));
-    // memset both arrays to zero before using them — same reason as buffer above
+    memset(raw_path, 0, sizeof(raw_path));
+    sscanf(buffer, "%7s %511s", method, raw_path);
 
-    sscanf(buffer, "%7s %511s", method, path);
-    // sscanf() reads formatted data from a string — like scanf() but from
-    // a string in memory instead of from keyboard input.
-    // "%7s %511s" means:
-    //   %7s = read up to 7 characters into method (leaves room for \0)
-    //   (space) = skip any whitespace between the two values
-    //   %511s = read up to 511 characters into path (leaves room for \0)
+    // split path from query string — e.g. "/api/output?name=X" → path="/api/output"
+    // strchr finds the first '?' character in the string
+    char path[512];
+    strncpy(path, raw_path, sizeof(path));
+    char *query = strchr(path, '?');
+    if (query) *query++ = '\0'; // terminate path at '?', query now points to "name=X"
 
     printf("Request: %s %s\n", method, path);
-    // Log the request to the terminal so we can see what is happening, %s in printf is replaced with the string value of method and path
 
-    // ── route each path to the correct file ───────────────────────────────
-    // strcmp() compares two strings — returns 0 if they are equal.
-    // We check the path the browser asked for and call send_file() with
-    // the matching file on disk and the correct Content-Type for that file.
+    // ── static file routes ─────────────────────────────────────────────────
     if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
-        send_file(client_fd, "web/index.html", "text/html"); // serve the dashboard page
+        send_file(client_fd, "web/index.html", "text/html");
 
     } else if (strcmp(path, "/style.css") == 0) {
-        send_file(client_fd, "web/style.css", "text/css"); // serve the stylesheet
+        send_file(client_fd, "web/style.css", "text/css");
 
     } else if (strcmp(path, "/app.js") == 0) {
-        send_file(client_fd, "web/app.js", "application/javascript"); // serve the JS
-    
-    } else if (strcmp(path, "/api/projects") == 0) {
-    // browser is asking for the project list as JSON
-    char json[8192];
-    projects_list_json(json, sizeof(json)); // fills json with the array string
+        send_file(client_fd, "web/app.js", "application/javascript");
 
+    // ── GET /api/projects ──────────────────────────────────────────────────
+    } else if (strcmp(path, "/api/projects") == 0 && strcmp(method, "GET") == 0) {
+        char json[8192];
+        projects_list_json(json, sizeof(json));
+        send_json(client_fd, json);
+
+    // ── POST /api/add ──────────────────────────────────────────────────────
+    // receives a new project from the browser form and saves it to projects.json
+    } else if (strcmp(path, "/api/add") == 0 && strcmp(method, "POST") == 0) {
+        const char *body = parse_body(buffer);
+        if (!body) { send_json(client_fd, "{\"ok\":false}"); return; }
+
+        Project p;
+        memset(&p, 0, sizeof(Project));
+        parse_json_string(body, "name",    p.name,    sizeof(p.name));
+        parse_json_string(body, "path",    p.path,    sizeof(p.path));
+        parse_json_string(body, "command", p.command, sizeof(p.command));
+        p.db_port = parse_json_int(body, "db_port");
+
+        if (strlen(p.name) == 0) {
+            send_json(client_fd, "{\"ok\":false,\"error\":\"Name is required\"}");
+            return;
+        }
+
+        int result = projects_add(&p);
+        if (result) send_json(client_fd, "{\"ok\":true}");
+        else        send_json(client_fd, "{\"ok\":false,\"error\":\"Failed to save\"}");
+
+    // ── POST /api/run ──────────────────────────────────────────────────────
+    // spawns the project as a child process
+    } else if (strcmp(path, "/api/run") == 0 && strcmp(method, "POST") == 0) {
+        const char *body = parse_body(buffer);
+        if (!body) { send_json(client_fd, "{\"ok\":false}"); return; }
+
+        char name[256], proj_path[512], command[256];
+        parse_json_string(body, "name",    name,      sizeof(name));
+        parse_json_string(body, "path",    proj_path, sizeof(proj_path));
+        parse_json_string(body, "command", command,   sizeof(command));
+        int db_port = parse_json_int(body, "db_port");
+
+        int result = runner_start(name, proj_path, command, db_port);
+
+        if (result == 0) {
+            send_json(client_fd, "{\"ok\":true}");
+        } else if (result == -2) {
+            // db port was not detected — send specific warning
+            char warn[256];
+            snprintf(warn, sizeof(warn),
+                "{\"ok\":false,\"error\":\"Database not detected on port %d. Start it first.\"}",
+                db_port);
+            send_json(client_fd, warn);
+        } else {
+            send_json(client_fd, "{\"ok\":false,\"error\":\"Failed to start project\"}");
+        }
+
+    // ── GET /api/output ────────────────────────────────────────────────────
+    // returns latest output lines from a running project's pipe
+    // URL format: /api/output?name=ProjectName
+    } else if (strcmp(path, "/api/output") == 0 && strcmp(method, "GET") == 0) {
+        char name[256] = {0};
+
+        // extract name from query string e.g. "name=Retro%20Museum"
+        // for simplicity we use spaces not URL encoding in project names
+        if (query) {
+            const char *n = strstr(query, "name=");
+            if (n) strncpy(name, n + 5, sizeof(name) - 1);
+        }
+
+        char output[4096] = {0};
+        int still_running = 0;
+        runner_get_output(name, output, sizeof(output), &still_running);
+
+        // build JSON response with output lines and running status
+        // we need to escape the output for safe JSON embedding
+        // for simplicity we replace newlines with \n in JSON
+        char json[8192];
+        snprintf(json, sizeof(json),
+            "{\"running\":%s,\"output\":\"%s\"}",
+            still_running ? "true" : "false",
+            output[0] ? output : "");
+
+        send_json(client_fd, json);
+
+    // ── POST /api/stop ─────────────────────────────────────────────────────
+    // kills a running project process
+    } else if (strcmp(path, "/api/stop") == 0 && strcmp(method, "POST") == 0) {
+        const char *body = parse_body(buffer);
+        char name[256] = {0};
+        if (body) parse_json_string(body, "name", name, sizeof(name));
+
+        int result = runner_stop(name);
+        if (result) send_json(client_fd, "{\"ok\":true}");
+        else        send_json(client_fd, "{\"ok\":false,\"error\":\"Project not running\"}");
+
+    } else {
+        send_404(client_fd);
+    }
+}
+
+// ── send_json ──────────────────────────────────────────────────────────────
+// sends a JSON string response — used by all API endpoints
+void send_json(int client_fd, const char *json) {
     char headers[256];
     sprintf(headers,
         "HTTP/1.1 200 OK\r\n"
-        "Content-Type: application/json\r\n" // tells browser this is JSON not HTML
+        "Content-Type: application/json\r\n"
         "Content-Length: %zu\r\n"
         "Connection: close\r\n"
         "\r\n",
         strlen(json));
-
     send(client_fd, headers, strlen(headers), 0);
-    send(client_fd, json, strlen(json), 0);
-
-    } else {
-        send_404(client_fd); // path not recognised — send a 404 response
-    }
+    send(client_fd, json,    strlen(json),    0);
 }
 
 // ── send_file ──────────────────────────────────────────────────────────────
-// reads a file from disk and sends it to the browser with correct HTTP headers.
-// Parameters:
-// client_fd = the browser connection to send to
-// filepath = path to the file on disk e.g. "web/index.html"
-// content_type = the MIME type to tell the browser e.g. "text/html"
 void send_file(int client_fd, const char *filepath, const char *content_type) {
-    FILE *f = fopen(filepath, "rb"); // fopen opens the file. "rb" = read binary mode
-    if (!f) {
-        send_404(client_fd); // file not found on disk — send 404
-        return;
-    }
+    FILE *f = fopen(filepath, "rb");
+    if (!f) { send_404(client_fd); return; }
 
-    fseek(f, 0, SEEK_END);  // move file cursor to the end
-    long size = ftell(f);   // ftell returns current position = file size in bytes
-    fseek(f, 0, SEEK_SET);  // move cursor back to the start before reading
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
 
     char *content = (char*)malloc(size + 1);
-    // malloc() allocates 'size' bytes on the heap at runtime.
-    // We use heap here because file size is unknown at compile time —
-    // stack arrays need a fixed size known before the program runs.
-    // +1 = extra byte for the null terminator at the end of the string.
     if (!content) { fclose(f); send_404(client_fd); return; }
-    // if malloc failed (out of memory) — clean up and send 404
 
-    fread(content, 1, size, f); // read entire file into content buffer
-    // Arguments: content = destination, 1 = read 1 byte at a time, size = how many, f = source file
-    content[size] = '\0'; // null terminate so string functions work correctly
-    fclose(f); // always close the file when done reading
+    fread(content, 1, size, f);
+    content[size] = '\0';
+    fclose(f);
 
-    // build HTTP response headers
     char headers[512];
     sprintf(headers,
         "HTTP/1.1 200 OK\r\n"
-        "Content-Type: %s\r\n"       // tells browser what kind of file this is
-        "Content-Length: %ld\r\n"    // tells browser exactly how many bytes are coming
+        "Content-Type: %s\r\n"
+        "Content-Length: %ld\r\n"
         "Connection: close\r\n"
-        "\r\n",                       // blank line required — separates headers from body
+        "\r\n",
         content_type, size);
 
-    send(client_fd, headers, strlen(headers), 0); // send headers first
-    send(client_fd, content, size, 0);             // then send the file content as the body
-
-    free(content); // always free malloc'd memory when done — forgetting causes memory leaks
+    send(client_fd, headers,  strlen(headers), 0);
+    send(client_fd, content,  size,            0);
+    free(content);
 }
 
 // ── send_404 ───────────────────────────────────────────────────────────────
-// sends a 404 Not Found response when the browser asks for a path we do not have
 void send_404(int client_fd) {
-    char *response =
-        "HTTP/1.1 404 Not Found\r\n"
-        "Content-Type: text/plain\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        "404 — Page not found";
-    send(client_fd, response, strlen(response), 0);
+    char *r = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n404 Not Found";
+    send(client_fd, r, strlen(r), 0);
 }

@@ -12,11 +12,29 @@
         <p>Personal Project Launcher</p>
     </div>
 
-    <div class="container">
-        <div class="project-card">
-            <h3>No projects yet</h3>
-            <p>Projects will appear here once registered.</p>
+    <div class="main-layout">
+
+        <!-- left panel: project list -->
+        <div class="panel-projects">
+            <div class="panel-title">Projects</div>
+            <div class="container" id="project-list">
+                <!-- project cards injected here by app.js -->
+            </div>
         </div>
+
+        <!-- right panel: add project form -->
+        <div class="panel-add">
+            <div class="panel-title">Add Project</div>
+            <div class="add-form">
+                <input type="text"   id="f-name"    placeholder="Project name" />
+                <input type="text"   id="f-path"    placeholder="Folder path e.g. C:/projects/my-app" />
+                <input type="text"   id="f-command" placeholder="Run command e.g. python main.py" />
+                <input type="number" id="f-dbport"  placeholder="Database port (0 = none)" value="0" />
+                <button class="btn-add" onclick="addProject()">Add Project</button>
+                <div id="add-status"></div>
+            </div>
+        </div>
+
     </div>
 
     <script src="/app.js"></script>

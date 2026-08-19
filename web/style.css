@@ -1,8 +1,4 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
     font-family: 'Segoe UI', sans-serif;
@@ -13,45 +9,43 @@ body {
 
 .header {
     background: #1a1a2e;
-    padding: 24px 32px;
+    padding: 20px 32px;
     border-bottom: 2px solid #048A81;
 }
 
-.header h1 {
-    font-size: 28px;
-    color: #048A81;
-    letter-spacing: 2px;
-}
+.header h1 { font-size: 26px; color: #048A81; letter-spacing: 2px; }
+.header p  { color: #888; margin-top: 4px; font-size: 13px; }
 
-.header p {
-    color: #888;
-    margin-top: 4px;
-    font-size: 14px;
-}
-
-.container {
-    padding: 32px;
-    max-width: 900px;
+/* two column layout */
+.main-layout {
+    display: flex;
+    gap: 24px;
+    padding: 24px 32px;
+    max-width: 1200px;
     margin: 0 auto;
 }
+
+.panel-projects { flex: 1; }
+.panel-add      { width: 320px; flex-shrink: 0; }
+
+.panel-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #555;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+}
+
+/* project cards */
+.container { display: flex; flex-direction: column; gap: 14px; }
 
 .project-card {
     background: #1a1a2e;
     border: 1px solid #2a2a3e;
     border-left: 4px solid #048A81;
     border-radius: 6px;
-    padding: 20px 24px;
-    margin-bottom: 16px;
-}
-
-.project-card h3 {
-    color: #a8ff78;
-    margin-bottom: 8px;
-}
-
-.project-card p {
-    color: #888;
-    font-size: 14px;
+    padding: 18px 20px;
 }
 
 .card-header {
@@ -61,46 +55,100 @@ body {
     margin-bottom: 8px;
 }
 
-.project-path {
-    color: #555;
-    font-size: 13px;
-    margin-bottom: 4px;
-    font-family: 'Courier New', monospace;
-}
+.project-card h3   { color: #a8ff78; font-size: 16px; }
+.project-path      { color: #444; font-size: 12px; font-family: 'Courier New', monospace; margin-bottom: 4px; }
+.project-command   { color: #555; font-size: 12px; margin-bottom: 14px; }
 
-.project-command {
-    color: #666;
-    font-size: 13px;
-    margin-bottom: 16px;
-}
+.card-actions { display: flex; gap: 10px; }
 
+/* status badge */
 .status {
-    font-size: 12px;
+    font-size: 11px;
     padding: 3px 10px;
-    border-radius: 12px;
+    border-radius: 10px;
     font-weight: bold;
 }
+.status.stopped { background: #2a1a1a; color: #ff6b6b; }
+.status.running { background: #1a2a1a; color: #a8ff78; }
 
-.status.stopped {
-    background: #2a1a1a;
-    color: #ff6b6b;
-}
-
-.status.running {
-    background: #1a2a1a;
-    color: #a8ff78;
-}
-
+/* buttons */
 .btn-run {
     background: #048A81;
     color: white;
     border: none;
-    padding: 8px 20px;
+    padding: 7px 18px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
+}
+.btn-run:hover    { background: #036b63; }
+.btn-run:disabled { background: #2a4a48; cursor: not-allowed; }
+
+.btn-stop {
+    background: #8a2020;
+    color: white;
+    border: none;
+    padding: 7px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.btn-stop:hover { background: #6b1818; }
+
+/* output panel */
+.output-panel {
+    display: none;           /* hidden until project runs */
+    margin-top: 14px;
+    background: #0a0a10;
+    border: 1px solid #2a2a3e;
+    border-radius: 4px;
+    padding: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #a8ff78;
+    max-height: 220px;
+    overflow-y: auto;
+    white-space: pre-wrap;   /* preserve newlines and spaces from output */
 }
 
-.btn-run:hover {
-    background: #036b63;
+/* add project form */
+.add-form {
+    background: #1a1a2e;
+    border: 1px solid #2a2a3e;
+    border-radius: 6px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
+
+.add-form input {
+    background: #0f0f1a;
+    border: 1px solid #2a2a3e;
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: #e0e0e0;
+    font-size: 13px;
+    font-family: 'Segoe UI', sans-serif;
+    width: 100%;
+}
+.add-form input:focus {
+    outline: none;
+    border-color: #048A81;
+}
+
+.btn-add {
+    background: #2e4057;
+    color: white;
+    border: none;
+    padding: 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-top: 4px;
+}
+.btn-add:hover { background: #3a5068; }
+
+#add-status { font-size: 12px; min-height: 16px; }
+
+.empty-state { color: #444; font-size: 14px; padding: 20px 0; }

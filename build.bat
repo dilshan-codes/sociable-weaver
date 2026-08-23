@@ -1,0 +1,1 @@
+gcc src/main.c src/server.c src/router.c src/projects.c src/runner.c -o sociable-weaver.exe -lws2_32

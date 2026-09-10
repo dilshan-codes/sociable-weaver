@@ -169,23 +169,4 @@ This project is a deliberate bridge toward building a J2ME emulator from scratch
 
 ---
 
-## Taking Screenshots
-
-To complete this README, take these five screenshots and add them above:
-
-1. **Dashboard with projects** — add 2-3 project cards visible
-2. **Project running** — click Run, wait for output panel to appear with text
-3. **Add project form** — fill in all four fields before clicking Add
-4. **Database warning** — register a project with db_port 3306 while MySQL is off, click Run
-5. **Multiple projects** — two or more projects visible with different statuses
-
-To add a screenshot: save it to the repo folder, then add this to the README where you want it:
-```markdown
-![Dashboard](screenshots/dashboard.png)
-```
-
----
-
-## License
-
 MIT — do whatever you want with it.
